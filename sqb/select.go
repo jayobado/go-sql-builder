@@ -5,6 +5,10 @@ import (
 	"strconv"
 )
 
+type Struct interface {
+	TableName() string
+}
+
 type SelectBuilder struct {
 	d        Dialect
 	distinct bool
@@ -27,6 +31,7 @@ func Select(d Dialect) *SelectBuilder { return &SelectBuilder{d: d} }
 func (b *SelectBuilder) Distinct() *SelectBuilder                 { b.distinct = true; return b }
 func (b *SelectBuilder) Columns(cols ...string) *SelectBuilder    { b.cols = append(b.cols, cols...); return b }
 func (b *SelectBuilder) From(table string) *SelectBuilder         { b.table = table; return b }
+func (b *SelectBuilder) FromStruct(str Struct) *SelectBuilder     { return b.From(str.TableName()) }
 func (b *SelectBuilder) Join(joinSQL string) *SelectBuilder       { b.joins = append(b.joins, joinSQL); return b }
 func (b *SelectBuilder) Where(pred Pred) *SelectBuilder           { b.where = append(b.where, pred); return b }
 func (b *SelectBuilder) GroupBy(cols ...string) *SelectBuilder    { b.groupBy = append(b.groupBy, cols...); return b }

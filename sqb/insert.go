@@ -46,6 +46,7 @@ type msMerge struct {
 
 func Insert(d Dialect) *InsertBuilder                            { return &InsertBuilder{d: d} }
 func (b *InsertBuilder) Into(table string) *InsertBuilder        { b.table = table; return b }
+func (b *InsertBuilder) IntoStruct(str Struct) *InsertBuilder    { return b.Into(str.TableName()) }
 func (b *InsertBuilder) Columns(cols ...string) *InsertBuilder   { b.cols = append(b.cols, cols...); return b }
 func (b *InsertBuilder) ValuesRow(vals ...any) *InsertBuilder    { b.rows = append(b.rows, vals); return b }
 func (b *InsertBuilder) ValuesRows(rows [][]any) *InsertBuilder  { b.rows = append(b.rows, rows...); return b }

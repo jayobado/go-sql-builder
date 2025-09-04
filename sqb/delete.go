@@ -12,9 +12,10 @@ type DeleteBuilder struct {
 	maxRowsOverride    *int64
 }
 
-func Delete(d Dialect) *DeleteBuilder                     { return &DeleteBuilder{d: d} }
-func (b *DeleteBuilder) From(table string) *DeleteBuilder { b.table = table; return b }
-func (b *DeleteBuilder) Where(pred Pred) *DeleteBuilder   { b.where = append(b.where, pred); return b }
+func Delete(d Dialect) *DeleteBuilder                     		{ return &DeleteBuilder{d: d} }
+func (b *DeleteBuilder) From(table string) *DeleteBuilder 		{ b.table = table; return b }
+func (b *DeleteBuilder) FromStruct(str Struct) *DeleteBuilder	{ return b.From(str.TableName()) }
+func (b *DeleteBuilder) Where(pred Pred) *DeleteBuilder   		{ b.where = append(b.where, pred); return b }
 
 func (b *DeleteBuilder) OutputDeleted(cols ...string) *DeleteBuilder {
 	b.outputDeleted = append(b.outputDeleted, cols...); return b
@@ -68,3 +69,4 @@ func (b *DeleteBuilder) Build() (string, []any, error) {
 	sql, args := s.result()
 	return sql, args, nil
 }
+
