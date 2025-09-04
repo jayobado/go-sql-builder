@@ -6,7 +6,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq" // or mysql / mssql driver
-	"github.com/you/sqb/sqb"
+	"github.com/jayobado/sql-builder/sqb"
 )
 
 type User struct {
