@@ -44,13 +44,25 @@ type msMerge struct {
 	holdLock  bool
 }
 
-func Insert(d Dialect) *InsertBuilder                            { return &InsertBuilder{d: d} }
-func (b *InsertBuilder) Into(table string) *InsertBuilder        { b.table = table; return b }
-func (b *InsertBuilder) IntoStruct(str Struct) *InsertBuilder    { return b.Into(str.TableName()) }
-func (b *InsertBuilder) Columns(cols ...string) *InsertBuilder   { b.cols = append(b.cols, cols...); return b }
-func (b *InsertBuilder) ValuesRow(vals ...any) *InsertBuilder    { b.rows = append(b.rows, vals); return b }
-func (b *InsertBuilder) ValuesRows(rows [][]any) *InsertBuilder  { b.rows = append(b.rows, rows...); return b }
-func (b *InsertBuilder) Returning(cols ...string) *InsertBuilder { b.returning = append(b.returning, cols...); return b }
+func Insert(d Dialect) *InsertBuilder                         { return &InsertBuilder{d: d} }
+func (b *InsertBuilder) Into(table string) *InsertBuilder     { b.table = table; return b }
+func (b *InsertBuilder) IntoStruct(str Struct) *InsertBuilder { return b.Into(str.TableName()) }
+func (b *InsertBuilder) Columns(cols ...string) *InsertBuilder {
+	b.cols = append(b.cols, cols...)
+	return b
+}
+func (b *InsertBuilder) ValuesRow(vals ...any) *InsertBuilder {
+	b.rows = append(b.rows, vals)
+	return b
+}
+func (b *InsertBuilder) ValuesRows(rows [][]any) *InsertBuilder {
+	b.rows = append(b.rows, rows...)
+	return b
+}
+func (b *InsertBuilder) Returning(cols ...string) *InsertBuilder {
+	b.returning = append(b.returning, cols...)
+	return b
+}
 func (b *InsertBuilder) OutputInserted(cols ...string) *InsertBuilder {
 	b.outputInserted = append(b.outputInserted, cols...)
 	return b
@@ -135,10 +147,14 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 		// USING (VALUES ...)
 		s.write(" USING (VALUES ")
 		for r := 0; r < len(b.rows); r++ {
-			if r > 0 { s.write(", ") }
+			if r > 0 {
+				s.write(", ")
+			}
 			s.write("(")
 			for i := 0; i < colCount; i++ {
-				if i > 0 { s.write(", ") }
+				if i > 0 {
+					s.write(", ")
+				}
 				s.idx++
 				s.write(b.d.Placeholder(s.idx))
 			}
@@ -150,14 +166,18 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 		s.write(" (")
 
 		qcols := make([]string, colCount)
-		for i, c := range b.cols { qcols[i] = b.d.QuoteIdent(c) }
+		for i, c := range b.cols {
+			qcols[i] = b.d.QuoteIdent(c)
+		}
 		s.write(strings.Join(qcols, ", "))
 		s.write(")")
 
 		// ON
 		s.write(" ON (")
 		for i, k := range b.msMerge.matchCols {
-			if i > 0 { s.write(" AND ") }
+			if i > 0 {
+				s.write(" AND ")
+			}
 			qk := b.d.QuoteIdent(k)
 			s.write("t." + qk + " = s." + qk)
 		}
@@ -167,10 +187,14 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 		if len(b.msMerge.updateSet) > 0 {
 			s.write(" WHEN MATCHED THEN UPDATE SET ")
 			keys := make([]string, 0, len(b.msMerge.updateSet))
-			for k := range b.msMerge.updateSet { keys = append(keys, k) }
+			for k := range b.msMerge.updateSet {
+				keys = append(keys, k)
+			}
 			sort.Strings(keys)
 			for i, k := range keys {
-				if i > 0 { s.write(", ") }
+				if i > 0 {
+					s.write(", ")
+				}
 				s.write(b.d.QuoteIdent(k) + " = ")
 				e := b.msMerge.updateSet[k]
 				s.emitSQL(e.sql, e.args)
@@ -182,7 +206,9 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 		s.write(strings.Join(qcols, ", "))
 		s.write(") VALUES (")
 		for i, c := range b.cols {
-			if i > 0 { s.write(", ") }
+			if i > 0 {
+				s.write(", ")
+			}
 			s.write("s." + b.d.QuoteIdent(c))
 		}
 		s.write(")")
@@ -191,7 +217,9 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 		if len(b.outputInserted) > 0 {
 			s.write(" OUTPUT ")
 			for i, c := range b.outputInserted {
-				if i > 0 { s.write(", ") }
+				if i > 0 {
+					s.write(", ")
+				}
 				s.write("INSERTED." + b.d.QuoteIdent(c))
 			}
 		}
@@ -207,24 +235,32 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 		s.write(" (")
 
 		qcols := make([]string, len(b.cols))
-		for i, c := range b.cols { qcols[i] = b.d.QuoteIdent(c) }
+		for i, c := range b.cols {
+			qcols[i] = b.d.QuoteIdent(c)
+		}
 		s.write(strings.Join(qcols, ", "))
 		s.write(")")
 
 		if len(b.outputInserted) > 0 {
 			s.write(" OUTPUT ")
 			for i, c := range b.outputInserted {
-				if i > 0 { s.write(", ") }
+				if i > 0 {
+					s.write(", ")
+				}
 				s.write("INSERTED." + b.d.QuoteIdent(c))
 			}
 		}
 
 		s.write(" VALUES ")
 		for r := 0; r < len(b.rows); r++ {
-			if r > 0 { s.write(", ") }
+			if r > 0 {
+				s.write(", ")
+			}
 			s.write("(")
 			for i := 0; i < colCount; i++ {
-				if i > 0 { s.write(", ") }
+				if i > 0 {
+					s.write(", ")
+				}
 				s.idx++
 				s.write(b.d.Placeholder(s.idx))
 			}
@@ -246,15 +282,21 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 	s.write(" (")
 
 	qcols := make([]string, len(b.cols))
-	for i, c := range b.cols { qcols[i] = b.d.QuoteIdent(c) }
+	for i, c := range b.cols {
+		qcols[i] = b.d.QuoteIdent(c)
+	}
 	s.write(strings.Join(qcols, ", "))
 	s.write(") VALUES ")
 
 	for r := 0; r < len(b.rows); r++ {
-		if r > 0 { s.write(", ") }
+		if r > 0 {
+			s.write(", ")
+		}
 		s.write("(")
 		for i := 0; i < colCount; i++ {
-			if i > 0 { s.write(", ") }
+			if i > 0 {
+				s.write(", ")
+			}
 			s.idx++
 			s.write(b.d.Placeholder(s.idx))
 		}
@@ -266,13 +308,17 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 	switch b.d.Name() {
 	case "postgres":
 		if b.pgUpsert != nil {
-			if !b.d.SupportsUpsert() { return "", nil, ErrOnConflictNotSupported }
+			if !b.d.SupportsUpsert() {
+				return "", nil, ErrOnConflictNotSupported
+			}
 			if b.pgUpsert.doNothing {
 				s.write(" ON CONFLICT")
 				if b.pgUpsert.target != nil {
 					if len(b.pgUpsert.target.Columns) > 0 {
 						qs := make([]string, len(b.pgUpsert.target.Columns))
-						for i, c := range b.pgUpsert.target.Columns { qs[i] = b.d.QuoteIdent(c) }
+						for i, c := range b.pgUpsert.target.Columns {
+							qs[i] = b.d.QuoteIdent(c)
+						}
 						s.write(" (" + strings.Join(qs, ", ") + ")")
 					} else if b.pgUpsert.target.Constraint != "" {
 						s.write(" ON CONSTRAINT " + b.d.QuoteIdent(b.pgUpsert.target.Constraint))
@@ -286,17 +332,23 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 				s.write(" ON CONFLICT")
 				if len(b.pgUpsert.target.Columns) > 0 {
 					qs := make([]string, len(b.pgUpsert.target.Columns))
-					for i, c := range b.pgUpsert.target.Columns { qs[i] = b.d.QuoteIdent(c) }
+					for i, c := range b.pgUpsert.target.Columns {
+						qs[i] = b.d.QuoteIdent(c)
+					}
 					s.write(" (" + strings.Join(qs, ", ") + ")")
 				} else {
 					s.write(" ON CONSTRAINT " + b.d.QuoteIdent(b.pgUpsert.target.Constraint))
 				}
 				s.write(" DO UPDATE SET ")
 				keys := make([]string, 0, len(b.pgUpsert.setMap))
-				for k := range b.pgUpsert.setMap { keys = append(keys, k) }
+				for k := range b.pgUpsert.setMap {
+					keys = append(keys, k)
+				}
 				sort.Strings(keys)
 				for i, k := range keys {
-					if i > 0 { s.write(", ") }
+					if i > 0 {
+						s.write(", ")
+					}
 					s.write(b.d.QuoteIdent(k) + " = ")
 					e := b.pgUpsert.setMap[k]
 					s.emitSQL(e.sql, e.args)
@@ -304,22 +356,27 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 				if len(b.pgUpsert.where) > 0 {
 					s.write(" WHERE ")
 					for i, p := range b.pgUpsert.where {
-						if i > 0 { s.write(" AND ") }
-						s.write(wrap(p))
+						if i > 0 {
+							s.write(" AND ")
+						}
+						s.emitPredicate(p)
 					}
-					for _, p := range b.pgUpsert.where { s.emitPredicate(p) }
 				}
 			}
 		}
 	case "sqlite":
 		if b.pgUpsert != nil {
-			if !b.d.SupportsUpsert() { return "", nil, ErrOnConflictNotSupported }
+			if !b.d.SupportsUpsert() {
+				return "", nil, ErrOnConflictNotSupported
+			}
 			if b.pgUpsert.doNothing {
 				s.write(" ON CONFLICT")
 				if b.pgUpsert.target != nil {
 					if len(b.pgUpsert.target.Columns) > 0 {
 						qs := make([]string, len(b.pgUpsert.target.Columns))
-						for i, c := range b.pgUpsert.target.Columns { qs[i] = b.d.QuoteIdent(c) }
+						for i, c := range b.pgUpsert.target.Columns {
+							qs[i] = b.d.QuoteIdent(c)
+						}
 						s.write(" (" + strings.Join(qs, ", ") + ")")
 					} else if b.pgUpsert.target.Constraint != "" {
 						return "", nil, ErrConstraintNameNotSupported
@@ -334,13 +391,19 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 					return "", nil, ErrConstraintNameNotSupported
 				}
 				qs := make([]string, len(b.pgUpsert.target.Columns))
-				for i, c := range b.pgUpsert.target.Columns { qs[i] = b.d.QuoteIdent(c) }
+				for i, c := range b.pgUpsert.target.Columns {
+					qs[i] = b.d.QuoteIdent(c)
+				}
 				s.write(" ON CONFLICT (" + strings.Join(qs, ", ") + ") DO UPDATE SET ")
 				keys := make([]string, 0, len(b.pgUpsert.setMap))
-				for k := range b.pgUpsert.setMap { keys = append(keys, k) }
+				for k := range b.pgUpsert.setMap {
+					keys = append(keys, k)
+				}
 				sort.Strings(keys)
 				for i, k := range keys {
-					if i > 0 { s.write(", ") }
+					if i > 0 {
+						s.write(", ")
+					}
 					s.write(b.d.QuoteIdent(k) + " = ")
 					e := b.pgUpsert.setMap[k]
 					s.emitSQL(e.sql, e.args)
@@ -348,27 +411,36 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 				if len(b.pgUpsert.where) > 0 {
 					s.write(" WHERE ")
 					for i, p := range b.pgUpsert.where {
-						if i > 0 { s.write(" AND ") }
-						s.write(wrap(p))
+						if i > 0 {
+							s.write(" AND ")
+						}
+						s.emitPredicate(p)
 					}
-					for _, p := range b.pgUpsert.where { s.emitPredicate(p) }
 				}
 			}
 		}
 	case "mysql":
-		if b.pgUpsert != nil { return "", nil, ErrOnConflictNotSupported }
+		if b.pgUpsert != nil {
+			return "", nil, ErrOnConflictNotSupported
+		}
 		if b.myUpsert != nil {
 			s.write(" ON DUPLICATE KEY UPDATE ")
 			if b.myUpsert.doNothing {
-				if b.myUpsert.noopCol == "" { return "", nil, ErrNoOpColumnRequired }
+				if b.myUpsert.noopCol == "" {
+					return "", nil, ErrNoOpColumnRequired
+				}
 				qc := b.d.QuoteIdent(b.myUpsert.noopCol)
 				s.write(qc + " = " + qc)
 			} else {
 				keys := make([]string, 0, len(b.myUpsert.setMap))
-				for k := range b.myUpsert.setMap { keys = append(keys, k) }
+				for k := range b.myUpsert.setMap {
+					keys = append(keys, k)
+				}
 				sort.Strings(keys)
 				for i, k := range keys {
-					if i > 0 { s.write(", ") }
+					if i > 0 {
+						s.write(", ")
+					}
 					s.write(b.d.QuoteIdent(k) + " = ")
 					e := b.myUpsert.setMap[k]
 					s.emitSQL(e.sql, e.args)
@@ -381,7 +453,9 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 	if b.d.HasReturning() && len(b.returning) > 0 {
 		s.write(" RETURNING ")
 		qr := make([]string, len(b.returning))
-		for i, c := range b.returning { qr[i] = b.d.QuoteIdent(c) }
+		for i, c := range b.returning {
+			qr[i] = b.d.QuoteIdent(c)
+		}
 		s.write(strings.Join(qr, ", "))
 	}
 
@@ -391,7 +465,6 @@ func (b *InsertBuilder) Build() (string, []any, error) {
 
 // internal clone helper for batch splitting
 func (b *InsertBuilder) valuesRowsCopy(rows [][]any) { b.rows = append(b.rows, rows...) }
-
 
 // Split into chunks such that placeholders <= maxParams.
 // Use e.g. 900 for SQLite, ~60000 for Postgres, etc.

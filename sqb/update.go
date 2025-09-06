@@ -25,30 +25,43 @@ func (b *UpdateBuilder) Table(table string) *UpdateBuilder      { b.table = tabl
 func (b *UpdateBuilder) TableStruct(str Struct) *UpdateBuilder  { return b.Table(str.TableName()) }
 func (b *UpdateBuilder) Set(col string, val any) *UpdateBuilder { b.setMap[col] = val; return b }
 func (b *UpdateBuilder) SetExpr(col string, e Expr) *UpdateBuilder {
-	b.setMap[col] = e; return b
+	b.setMap[col] = e
+	return b
 }
-func (b *UpdateBuilder) Where(pred Pred) *UpdateBuilder         { b.where = append(b.where, pred); return b }
+func (b *UpdateBuilder) Where(pred Pred) *UpdateBuilder { b.where = append(b.where, pred); return b }
 
 func (b *UpdateBuilder) Returning(cols ...string) *UpdateBuilder {
-	b.returning = append(b.returning, cols...); return b
+	b.returning = append(b.returning, cols...)
+	return b
 }
 func (b *UpdateBuilder) OutputInserted(cols ...string) *UpdateBuilder {
-	b.outputInserted = append(b.outputInserted, cols...); return b
+	b.outputInserted = append(b.outputInserted, cols...)
+	return b
 }
 func (b *UpdateBuilder) OutputDeleted(cols ...string) *UpdateBuilder {
-	b.outputDeleted = append(b.outputDeleted, cols...); return b
+	b.outputDeleted = append(b.outputDeleted, cols...)
+	return b
 }
 
-func (b *UpdateBuilder) RequireWhere() *UpdateBuilder         { t := true;  b.whereGuardOverride = &t; return b }
-func (b *UpdateBuilder) AllowFullTable() *UpdateBuilder       { f := false; b.whereGuardOverride = &f; return b }
+func (b *UpdateBuilder) RequireWhere() *UpdateBuilder { t := true; b.whereGuardOverride = &t; return b }
+func (b *UpdateBuilder) AllowFullTable() *UpdateBuilder {
+	f := false
+	b.whereGuardOverride = &f
+	return b
+}
 func (b *UpdateBuilder) AllowFullTableWithMax(max int64) *UpdateBuilder {
-	f := false; b.whereGuardOverride = &f; b.maxRowsOverride = &max; return b
+	f := false
+	b.whereGuardOverride = &f
+	b.maxRowsOverride = &max
+	return b
 }
 func (b *UpdateBuilder) Reason(r string) *UpdateBuilder { b.metaReason = r; return b }
 
 func (b *UpdateBuilder) guardMeta() (AuditMeta, int64) {
 	max := int64(-1)
-	if b.maxRowsOverride != nil { max = *b.maxRowsOverride }
+	if b.maxRowsOverride != nil {
+		max = *b.maxRowsOverride
+	}
 	return AuditMeta{Op: "UPDATE", Table: b.table, Reason: b.metaReason}, max
 }
 
@@ -61,7 +74,9 @@ func (b *UpdateBuilder) Build() (string, []any, error) {
 	}
 
 	guard := DefaultSafety.RequireWhereUpdate
-	if b.whereGuardOverride != nil { guard = *b.whereGuardOverride }
+	if b.whereGuardOverride != nil {
+		guard = *b.whereGuardOverride
+	}
 	if guard && len(b.where) == 0 {
 		return "", nil, ErrWhereRequired
 	}
@@ -72,16 +87,26 @@ func (b *UpdateBuilder) Build() (string, []any, error) {
 	s.write(" SET ")
 
 	keys := make([]string, 0, len(b.setMap))
-	for k := range b.setMap { keys = append(keys, k) }
+	for k := range b.setMap {
+		keys = append(keys, k)
+	}
 	sort.Strings(keys)
 
 	for i, k := range keys {
-		if i > 0 { s.write(", ") }
+		if i > 0 {
+			s.write(", ")
+		}
 		s.write(b.d.QuoteIdent(k))
 		s.write(" = ")
-		s.idx++
-		s.write(b.d.Placeholder(s.idx))
-		s.args = append(s.args, b.setMap[k])
+
+		// Handle Expr vs regular values
+		if expr, ok := b.setMap[k].(Expr); ok {
+			s.emitSQL(expr.sql, expr.args)
+		} else {
+			s.idx++
+			s.write(b.d.Placeholder(s.idx))
+			s.args = append(s.args, b.setMap[k])
+		}
 	}
 
 	// MSSQL OUTPUT (after SET, before WHERE)
@@ -90,7 +115,9 @@ func (b *UpdateBuilder) Build() (string, []any, error) {
 		first := true
 		emit := func(prefix string, cols []string) {
 			for _, c := range cols {
-				if !first { s.write(", ") }
+				if !first {
+					s.write(", ")
+				}
 				first = false
 				s.write(prefix + "." + b.d.QuoteIdent(c))
 			}
@@ -102,16 +129,19 @@ func (b *UpdateBuilder) Build() (string, []any, error) {
 	if len(b.where) > 0 {
 		s.write(" WHERE ")
 		for i, p := range b.where {
-			if i > 0 { s.write(" AND ") }
-			s.write(wrap(p))
+			if i > 0 {
+				s.write(" AND ")
+			}
+			s.emitPredicate(p)
 		}
-		for _, p := range b.where { s.emitPredicate(p) }
 	}
 
 	if b.d.HasReturning() && len(b.returning) > 0 {
 		s.write(" RETURNING ")
 		qr := make([]string, len(b.returning))
-		for i, c := range b.returning { qr[i] = b.d.QuoteIdent(c) }
+		for i, c := range b.returning {
+			qr[i] = b.d.QuoteIdent(c)
+		}
 		s.write(strings.Join(qr, ", "))
 	}
 

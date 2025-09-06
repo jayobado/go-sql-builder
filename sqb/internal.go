@@ -12,6 +12,11 @@ type buildState struct {
 func (s *buildState) write(sx string) { _, _ = s.buf.WriteString(sx) }
 
 func (s *buildState) emitPredicate(p Pred) {
+	// Add parentheses if not explicitly disabled
+	if !p.noParens {
+		s.write("(")
+	}
+
 	for i := 0; i < len(p.sql); i++ {
 		if p.sql[i] == '?' {
 			s.idx++
@@ -20,6 +25,11 @@ func (s *buildState) emitPredicate(p Pred) {
 			s.buf.WriteByte(p.sql[i])
 		}
 	}
+
+	if !p.noParens {
+		s.write(")")
+	}
+
 	s.args = append(s.args, p.arg...)
 }
 

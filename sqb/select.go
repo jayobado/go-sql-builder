@@ -1,14 +1,19 @@
 package sqb
 
 import (
-	"strings"
 	"strconv"
+	"strings"
 )
 
+// Struct represents any type that can provide a table name for SQL operations.
+// Useful for struct-based table mapping.
 type Struct interface {
 	TableName() string
 }
 
+// SelectBuilder builds SELECT statements with support for all standard SQL features:
+// columns, FROM, JOINs, WHERE, GROUP BY, HAVING, ORDER BY, LIMIT, OFFSET.
+// Includes safety guards to prevent dangerous queries.
 type SelectBuilder struct {
 	d        Dialect
 	distinct bool
@@ -27,28 +32,56 @@ type SelectBuilder struct {
 	requireLimit *bool
 }
 
+// Select creates a new SELECT query builder for the given dialect.
+//
+// Example:
+//
+//	sql, args, err := sqb.Select(sqb.Postgres{}).
+//		Columns("id", "email", "name").
+//		From("users").
+//		Where(sqb.Eq("status", "active", d)).
+//		OrderBy("created_at DESC").
+//		Limit(10).
+//		Build()
 func Select(d Dialect) *SelectBuilder { return &SelectBuilder{d: d} }
 
-func (b *SelectBuilder) Distinct() *SelectBuilder                 { b.distinct = true; return b }
-func (b *SelectBuilder) Columns(cols ...string) *SelectBuilder    { b.cols = append(b.cols, cols...); return b }
-func (b *SelectBuilder) ColumnExpr(expr string) *SelectBuilder    { b.rawCols = append(b.rawCols, expr); return b }
-func (b *SelectBuilder) From(table string) *SelectBuilder         { b.table = table; return b }
-func (b *SelectBuilder) FromStruct(str Struct) *SelectBuilder     { return b.From(str.TableName()) }
-func (b *SelectBuilder) Join(joinSQL string) *SelectBuilder       { b.joins = append(b.joins, joinSQL); return b }
-func (b *SelectBuilder) Where(pred Pred) *SelectBuilder           { b.where = append(b.where, pred); return b }
+func (b *SelectBuilder) Distinct() *SelectBuilder { b.distinct = true; return b }
+func (b *SelectBuilder) Columns(cols ...string) *SelectBuilder {
+	b.cols = append(b.cols, cols...)
+	return b
+}
+func (b *SelectBuilder) ColumnExpr(expr string) *SelectBuilder {
+	b.rawCols = append(b.rawCols, expr)
+	return b
+}
+func (b *SelectBuilder) From(table string) *SelectBuilder     { b.table = table; return b }
+func (b *SelectBuilder) FromStruct(str Struct) *SelectBuilder { return b.From(str.TableName()) }
+func (b *SelectBuilder) Join(joinSQL string) *SelectBuilder {
+	b.joins = append(b.joins, joinSQL)
+	return b
+}
+func (b *SelectBuilder) Where(pred Pred) *SelectBuilder { b.where = append(b.where, pred); return b }
 func (b *SelectBuilder) WhereRaw(sql string, args ...any) *SelectBuilder {
-	b.where = append(b.where, raw(sql, args...)); return b
+	b.where = append(b.where, raw(sql, args...))
+	return b
 }
-func (b *SelectBuilder) GroupBy(cols ...string) *SelectBuilder    { b.groupBy = append(b.groupBy, cols...); return b }
-func (b *SelectBuilder) Having(pred Pred) *SelectBuilder          { b.having = append(b.having, pred); return b }
+func (b *SelectBuilder) GroupBy(cols ...string) *SelectBuilder {
+	b.groupBy = append(b.groupBy, cols...)
+	return b
+}
+func (b *SelectBuilder) Having(pred Pred) *SelectBuilder { b.having = append(b.having, pred); return b }
 func (b *SelectBuilder) HavingRaw(sql string, args ...any) *SelectBuilder {
-	b.having = append(b.having, raw(sql, args...)); return b
+	b.having = append(b.having, raw(sql, args...))
+	return b
 }
-func (b *SelectBuilder) OrderBy(exprs ...string) *SelectBuilder   { b.orderBy = append(b.orderBy, exprs...); return b }
-func (b *SelectBuilder) Limit(n int) *SelectBuilder               { b.limit = &n; return b }
-func (b *SelectBuilder) Offset(n int) *SelectBuilder              { b.offset = &n; return b }
-func (b *SelectBuilder) RequireFrom() *SelectBuilder              { t := true; b.requireFrom = &t; return b }
-func (b *SelectBuilder) RequireLimit() *SelectBuilder             { t := true; b.requireLimit = &t; return b }
+func (b *SelectBuilder) OrderBy(exprs ...string) *SelectBuilder {
+	b.orderBy = append(b.orderBy, exprs...)
+	return b
+}
+func (b *SelectBuilder) Limit(n int) *SelectBuilder   { b.limit = &n; return b }
+func (b *SelectBuilder) Offset(n int) *SelectBuilder  { b.offset = &n; return b }
+func (b *SelectBuilder) RequireFrom() *SelectBuilder  { t := true; b.requireFrom = &t; return b }
+func (b *SelectBuilder) RequireLimit() *SelectBuilder { t := true; b.requireLimit = &t; return b }
 
 func (b *SelectBuilder) Build() (string, []any, error) {
 	if len(b.joins) > 0 && b.table == "" {
@@ -76,7 +109,7 @@ func (b *SelectBuilder) Build() (string, []any, error) {
 	if b.distinct {
 		s.write("DISTINCT ")
 	}
-	
+
 	if len(b.cols) == 0 && len(b.rawCols) == 0 {
 		s.write("*")
 	} else {
@@ -102,9 +135,6 @@ func (b *SelectBuilder) Build() (string, []any, error) {
 			if i > 0 {
 				s.write(" AND ")
 			}
-			s.write(wrap(p))
-		}
-		for _, p := range b.where {
 			s.emitPredicate(p)
 		}
 	}
@@ -122,9 +152,6 @@ func (b *SelectBuilder) Build() (string, []any, error) {
 			if i > 0 {
 				s.write(" AND ")
 			}
-			s.write(wrap(p))
-		}
-		for _, p := range b.having {
 			s.emitPredicate(p)
 		}
 	}
@@ -143,4 +170,3 @@ func (b *SelectBuilder) Build() (string, []any, error) {
 	sql, args := s.result()
 	return sql, args, nil
 }
-
