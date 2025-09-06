@@ -14,3 +14,12 @@ var DefaultSafety = SafetyProfile{
 	RequireFromSelect:  false,
 	RequireLimitSelect: false,
 }
+
+type AuditMeta struct {
+	Op     string
+	Table  string
+	Reason string
+	SQL    string
+	Args   []any
+	DryRun bool
+}

@@ -51,7 +51,7 @@ func main() {
 			sqb.ConflictColumns("email"),
 			sqb.MergeSets(
 				sqb.SetExcluded(d, "name", "status"),
-				map[string]sqb.Expr{"updated_at": sqb.Raw("NOW()")},
+				map[string]sqb.Expr{"updated_at": sqb.RawExpr("NOW()")},
 			),
 		).
 		Returning("id")

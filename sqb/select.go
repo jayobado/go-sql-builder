@@ -13,6 +13,7 @@ type SelectBuilder struct {
 	d        Dialect
 	distinct bool
 	cols     []string
+	rawCols  []string
 	table    string
 	joins    []string
 	where    []Pred
@@ -30,12 +31,19 @@ func Select(d Dialect) *SelectBuilder { return &SelectBuilder{d: d} }
 
 func (b *SelectBuilder) Distinct() *SelectBuilder                 { b.distinct = true; return b }
 func (b *SelectBuilder) Columns(cols ...string) *SelectBuilder    { b.cols = append(b.cols, cols...); return b }
+func (b *SelectBuilder) ColumnExpr(expr string) *SelectBuilder    { b.rawCols = append(b.rawCols, expr); return b }
 func (b *SelectBuilder) From(table string) *SelectBuilder         { b.table = table; return b }
 func (b *SelectBuilder) FromStruct(str Struct) *SelectBuilder     { return b.From(str.TableName()) }
 func (b *SelectBuilder) Join(joinSQL string) *SelectBuilder       { b.joins = append(b.joins, joinSQL); return b }
 func (b *SelectBuilder) Where(pred Pred) *SelectBuilder           { b.where = append(b.where, pred); return b }
+func (b *SelectBuilder) WhereRaw(sql string, args ...any) *SelectBuilder {
+	b.where = append(b.where, raw(sql, args...)); return b
+}
 func (b *SelectBuilder) GroupBy(cols ...string) *SelectBuilder    { b.groupBy = append(b.groupBy, cols...); return b }
 func (b *SelectBuilder) Having(pred Pred) *SelectBuilder          { b.having = append(b.having, pred); return b }
+func (b *SelectBuilder) HavingRaw(sql string, args ...any) *SelectBuilder {
+	b.having = append(b.having, raw(sql, args...)); return b
+}
 func (b *SelectBuilder) OrderBy(exprs ...string) *SelectBuilder   { b.orderBy = append(b.orderBy, exprs...); return b }
 func (b *SelectBuilder) Limit(n int) *SelectBuilder               { b.limit = &n; return b }
 func (b *SelectBuilder) Offset(n int) *SelectBuilder              { b.offset = &n; return b }
@@ -68,14 +76,16 @@ func (b *SelectBuilder) Build() (string, []any, error) {
 	if b.distinct {
 		s.write("DISTINCT ")
 	}
-	if len(b.cols) == 0 {
+	
+	if len(b.cols) == 0 && len(b.rawCols) == 0 {
 		s.write("*")
 	} else {
-		quoted := make([]string, len(b.cols))
-		for i, c := range b.cols {
-			quoted[i] = b.d.QuoteIdent(c)
+		parts := make([]string, 0, len(b.cols)+len(b.rawCols))
+		for _, c := range b.cols {
+			parts = append(parts, b.d.QuoteIdent(c))
 		}
-		s.write(strings.Join(quoted, ", "))
+		parts = append(parts, b.rawCols...)
+		s.write(strings.Join(parts, ", "))
 	}
 
 	if b.table != "" {

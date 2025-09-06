@@ -122,6 +122,6 @@ func NotBetween(col string, start, end any, d Dialect) Pred {
 	return raw(fmt.Sprintf("%s NOT BETWEEN ? AND ?", d.QuoteIdent(col)), start, end)
 }
 
-func RawPred(sql string, args ...any) Pred { return raw(sql, args...) }
+func Raw(sql string, args ...any) Pred { return raw(sql, args...) }
 
 func AllRows() Pred { return Pred{sql: "1=1", noParens: true} }

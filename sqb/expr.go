@@ -6,7 +6,7 @@ type Expr struct {
 }
 
 func Val(v any) Expr                   { return Expr{sql: "?", args: []any{v}} }
-func Raw(sql string, args ...any) Expr { return Expr{sql: sql, args: args} }
+func RawExpr(sql string, args ...any) Expr { return Expr{sql: sql, args: args} }
 
 // EXCLUDED / excluded (PG/SQLite)
 func Excluded(col string, d Dialect) Expr {

@@ -8,14 +8,6 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-type AuditMeta struct {
-	Op     string
-	Table  string
-	Reason string
-	SQL    string
-	Args   []any
-	DryRun bool
-}
 
 var GlobalAuditHook func(ctx context.Context, meta AuditMeta)
 

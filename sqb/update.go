@@ -24,6 +24,9 @@ func Update(d Dialect) *UpdateBuilder                           { return &Update
 func (b *UpdateBuilder) Table(table string) *UpdateBuilder      { b.table = table; return b }
 func (b *UpdateBuilder) TableStruct(str Struct) *UpdateBuilder  { return b.Table(str.TableName()) }
 func (b *UpdateBuilder) Set(col string, val any) *UpdateBuilder { b.setMap[col] = val; return b }
+func (b *UpdateBuilder) SetExpr(col string, e Expr) *UpdateBuilder {
+	b.setMap[col] = e; return b
+}
 func (b *UpdateBuilder) Where(pred Pred) *UpdateBuilder         { b.where = append(b.where, pred); return b }
 
 func (b *UpdateBuilder) Returning(cols ...string) *UpdateBuilder {
