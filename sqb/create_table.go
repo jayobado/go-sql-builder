@@ -43,12 +43,17 @@ func (b *CreateTableBuilder) Table(name string) *CreateTableBuilder { b.table = 
 func (b *CreateTableBuilder) IfNotExists() *CreateTableBuilder      { b.ifNotExists = true; return b }
 func (b *CreateTableBuilder) InlineMySQLKeys() *CreateTableBuilder  { b.inlineMySQLKeys = true; return b }
 
-func (b *CreateTableBuilder) Column(name, sqlType string, opts ...ColOption) *CreateTableBuilder {
+func (b *CreateTableBuilder) ColumnStr(name, sqlType string, opts ...ColOption) *CreateTableBuilder {
 	c := colDef{name: name, typ: strings.ToUpper(strings.TrimSpace(sqlType))}
 	for _, opt := range opts { opt(&c) }
 	b.columns = append(b.columns, c)
 	return b
 }
+
+func (b *CreateTableBuilder) Column(name string, typ Type, opts ...ColOption) *CreateTableBuilder {
+	return b.ColumnStr(name, typ.SQL(b.d), opts...)
+}
+
 func (b *CreateTableBuilder) PrimaryKey(cols ...string) *CreateTableBuilder {
 	b.pk = append([]string{}, cols...); return b
 }

@@ -1,16 +1,16 @@
 # SQL Builder
 
-A type-safe, multi-dialect SQL query builder for Go with built-in safety guards and audit capabilities.
+A complete SQL builder for Go with type-safe DDL/DML operations and multi-dialect support.
 
 ## Features
 
-- 🏗️ **Fluent Builder API** - Intuitive method chaining for query construction
-- 🔒 **Type Safety** - Compile-time safety with proper Go types
-- 🎯 **Multi-Dialect Support** - PostgreSQL, MySQL, SQLite, SQL Server
-- 🛡️ **Safety Guards** - Prevent dangerous operations like accidental full-table updates/deletes
-- 📊 **Audit Trail** - Built-in logging and monitoring of SQL operations
+- 🏗️ **Complete SQL Support** - DDL (CREATE, ALTER, DROP) + DML (SELECT, INSERT, UPDATE, DELETE)
+- 🔒 **Type-Safe Schema** - Portable data types with dialect-specific mappings
+- 🎯 **Multi-Dialect** - PostgreSQL, MySQL, SQLite, SQL Server with proper quoting and placeholders
+- 🛡️ **Safety Guards** - Prevent dangerous operations with configurable protections
+- � **Advanced Upserts** - Native upsert support (ON CONFLICT, ON DUPLICATE KEY, MERGE)
+- 📊 **Schema Migration** - ALTER TABLE operations with dialect-aware handling
 - ⚡ **High Performance** - Efficient SQL generation with minimal allocations
-- 🔄 **Advanced Upserts** - Database-specific upsert operations (ON CONFLICT, ON DUPLICATE KEY, MERGE)
 
 ## Quick Start
 
@@ -18,27 +18,27 @@ A type-safe, multi-dialect SQL query builder for Go with built-in safety guards 
 package main
 
 import (
-    "context"
     "log"
-    
-    "github.com/jmoiron/sqlx"
-    _ "github.com/lib/pq"
     "github.com/jayobado/sql-builder/sqb"
 )
 
 func main() {
-    ctx := context.Background()
     d := sqb.Postgres{} // or MySQL{}, SQLite{}, SQLServer{}
-    
-    db, err := sqlx.Open("postgres", "postgres://user:pass@localhost/db")
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer db.Close()
-    
-    // SELECT with WHERE conditions
+
+    // CREATE TABLE with type-safe columns
+    sql, _, err := sqb.CreateTable(d).
+        Table("users").
+        IfNotExists().
+        Column("id", sqb.BigInt(), sqb.AutoIncrement(), sqb.NotNull()).
+        Column("email", sqb.Varchar(255), sqb.NotNull()).
+        Column("created_at", sqb.Timestamptz(), sqb.DefaultLiteral("NOW()")).
+        PrimaryKey("id").
+        UniqueIndex("idx_users_email", "email").
+        Build()
+
+    // SELECT with complex WHERE
     sql, args, err := sqb.Select(d).
-        Columns("id", "email", "name").
+        Columns("id", "email").
         From("users").
         Where(sqb.And(
             sqb.Eq("status", "active", d),
@@ -47,157 +47,151 @@ func main() {
         OrderBy("created_at DESC").
         Limit(10).
         Build()
-    
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-    var users []User
-    err = db.SelectContext(ctx, &users, sql, args...)
-    if err != nil {
-        log.Fatal(err)
-    }
+    // Result: SELECT "id", "email" FROM "users" WHERE (("status" = $1) AND ("role" IN ($2,$3))) ORDER BY created_at DESC LIMIT 10
+
+    // UPSERT with proper conflict handling
+    sql, args, err = sqb.Insert(d).
+        Into("users").
+        Columns("email", "name").
+        ValuesRow("alice@example.com", "Alice").
+        OnConflictDoUpdate(
+            sqb.ConflictColumns("email"),
+            sqb.SetExcluded(d, "name"),
+        ).
+        Returning("id").
+        Build()
 }
 ```
 
-## Supported Dialects
+## Type System
 
-### PostgreSQL
+The library provides portable data types that map correctly across dialects:
+
 ```go
-d := sqb.Postgres{}
-// Features: RETURNING, ON CONFLICT, $1 placeholders, "quoted" identifiers
+// Basic types
+sqb.Text()                    // TEXT, NVARCHAR(MAX), etc.
+sqb.Varchar(255)             // VARCHAR(255), TEXT (SQLite)
+sqb.Integer()                // INTEGER, INT
+sqb.BigInt()                 // BIGINT
+sqb.Boolean()                // BOOLEAN, TINYINT(1), BIT
+sqb.Decimal(10, 2)           // DECIMAL(10,2)
+
+// Date/time types
+sqb.Date()                   // DATE
+sqb.Timestamp()              // TIMESTAMP, DATETIME, DATETIME2
+sqb.Timestamptz()            // TIMESTAMPTZ, DATETIMEOFFSET
+
+// JSON and specialized types
+sqb.JSON()                   // JSON, NVARCHAR(MAX)
+sqb.JSONB()                  // JSONB (PostgreSQL)
+sqb.UUID()                   // UUID, CHAR(36), UNIQUEIDENTIFIER
+sqb.Binary(16)               // BINARY(16), BLOB
+
+// Dialect-specific enums
+sqb.EnumPG("status_type")    // PostgreSQL enum reference
+sqb.EnumMySQL("small", "large") // MySQL inline enum
 ```
 
-### MySQL
+## DDL Operations
+
+### CREATE TABLE
+
 ```go
-d := sqb.MySQL{}
-// Features: ON DUPLICATE KEY UPDATE, ? placeholders, `quoted` identifiers
+sql, _, err := sqb.CreateTable(d).
+    Table("orders").
+    IfNotExists().
+    Column("id", sqb.UUID(), sqb.UUIDPrimaryKey(d)).
+    Column("user_id", sqb.BigInt(), sqb.NotNull()).
+    Column("amount", sqb.Decimal(10, 2), sqb.NotNull()).
+    Column("status", sqb.Varchar(20), sqb.DefaultLiteral("'pending'")).
+    Column("created_at", sqb.Timestamptz(), sqb.TimestamptzNow(d)).
+    Column("metadata", sqb.JSONB()).
+    PrimaryKey("id").
+    ForeignKey([]string{"user_id"}, "users", []string{"id"}, "CASCADE", "").
+    UniqueIndex("idx_orders_user_id", "user_id", "created_at").
+    Build()
 ```
 
-### SQLite
+### ALTER TABLE
+
 ```go
-d := sqb.SQLite{
-    EnableUpsert:    true,  // Enable ON CONFLICT support
-    EnableReturning: true,  // Enable RETURNING support (3.35+)
-}
-// Features: Optional RETURNING/UPSERT, ? placeholders, "quoted" identifiers
+// Multiple operations in one call
+stmts, err := sqb.AlterTable(d).
+    Table("users").
+    AddColumn("nickname", sqb.Varchar(100)).
+    RenameColumn("name", "full_name", sqb.Varchar(255)).  // MySQL needs type
+    SetDefault("status", "'active'").
+    AddUnique("uq_users_email", "email").
+    BuildMany()
+
+// Individual operations
+sql, _, err := sqb.AlterTable(d).
+    Table("products").
+    AlterType("price", sqb.Decimal(12, 4)).
+    Build()
 ```
 
-### SQL Server
-```go
-d := sqb.SQLServer{}
-// Features: MERGE, OUTPUT, @p1 placeholders, [quoted] identifiers
-```
-
-## Query Building
+## DML Operations
 
 ### SELECT Queries
 
 ```go
-// Basic SELECT
+// Complex SELECT with joins and aggregations
 sql, args, err := sqb.Select(d).
-    Columns("id", "email", "name").
-    From("users").
-    Where(sqb.Eq("status", "active", d)).
-    Build()
-// Result: SELECT "id", "email", "name" FROM "users" WHERE ("status" = $1)
-
-// Complex WHERE with AND/OR
-sql, args, err := sqb.Select(d).
-    Columns("*").
-    From("orders").
+    Columns("u.id", "u.email").
+    ColumnExpr("COUNT(o.id) as order_count").
+    From("users u").
+    Join("LEFT JOIN orders o ON o.user_id = u.id").
     Where(sqb.And(
-        sqb.Gte("created_at", "2023-01-01", d),
+        sqb.Gte("u.created_at", "2023-01-01", d),
         sqb.Or(
-            sqb.Eq("status", "completed", d),
-            sqb.Eq("status", "shipped", d),
+            sqb.Eq("u.status", "active", d),
+            sqb.Eq("u.status", "premium", d),
         ),
     )).
-    OrderBy("created_at DESC").
-    Limit(50).
-    Build()
-
-// JOINs
-sql, args, err := sqb.Select(d).
-    Columns("u.name", "p.title").
-    From("users u").
-    Join("LEFT JOIN posts p ON p.user_id = u.id").
-    Where(sqb.NotEq("u.deleted_at", nil, d)).
+    GroupBy("u.id", "u.email").
+    Having(sqb.Gt("COUNT(o.id)", 5, d)).
+    OrderBy("order_count DESC").
+    Limit(20).
     Build()
 ```
 
-### INSERT Queries
+### Dialect-Specific Upserts
 
 ```go
-// Single row insert
-sql, args, err := sqb.Insert(d).
-    Into("users").
-    Columns("email", "name", "status").
-    ValuesRow("alice@example.com", "Alice", "active").
-    Build()
-
-// Multi-row insert
-sql, args, err := sqb.Insert(d).
-    Into("users").
-    Columns("email", "name").
-    ValuesRows([][]any{
-        {"alice@example.com", "Alice"},
-        {"bob@example.com", "Bob"},
-    }).
-    Build()
-
-// PostgreSQL UPSERT
+// PostgreSQL: ON CONFLICT with conditional update
 sql, args, err := sqb.Insert(d).
     Into("users").
     Columns("email", "name", "status").
     ValuesRow("alice@example.com", "Alice", "active").
     OnConflictDoUpdate(
         sqb.ConflictColumns("email"),
-        sqb.SetExcluded(d, "name", "status"),
+        sqb.SetExcluded(d, "name"),  // Only update name, not status
     ).
+    OnConflictWhere(sqb.NotEq("status", "banned", d)).  // Skip if banned
     Returning("id").
     Build()
 
-// MySQL UPSERT
+// MySQL: ON DUPLICATE KEY UPDATE with VALUES()
 sql, args, err := sqb.Insert(d).
-    Into("users").
-    Columns("email", "name").
-    ValuesRow("alice@example.com", "Alice").
+    Into("counters").
+    Columns("key", "value").
+    ValuesRow("page_views", 1).
     OnDuplicateKeyUpdate(map[string]sqb.Expr{
-        "name": sqb.Values("name", d),
+        "value": sqb.RawExpr("value + VALUES(value)"),  // Increment
         "updated_at": sqb.RawExpr("NOW()"),
     }).
     Build()
-```
 
-### UPDATE Queries
-
-```go
-// Basic update
-sql, args, err := sqb.Update(d).
-    Table("users").
-    Set("name", "Alice Updated").
-    Set("status", "verified").
-    Where(sqb.Eq("id", 1, d)).
-    Build()
-
-// Update with expressions
-sql, args, err := sqb.Update(d).
-    Table("users").
-    Set("login_count", 5).
-    SetExpr("last_login", sqb.RawExpr("NOW()")).
-    Where(sqb.Eq("email", "alice@example.com", d)).
-    Returning("id", "updated_at").
-    Build()
-```
-
-### DELETE Queries
-
-```go
-// Basic delete
-sql, args, err := sqb.Delete(d).
-    From("users").
-    Where(sqb.Eq("status", "banned", d)).
+// SQL Server: MERGE statement
+sql, args, err := sqb.Insert(d).
+    Into("inventory").
+    Columns("product_id", "quantity").
+    ValuesRow(123, 50).
+    MSSQLMergeOn([]string{"product_id"}, map[string]sqb.Expr{
+        "quantity": sqb.RawExpr("s.quantity"),
+    }).
+    OutputInserted("product_id", "quantity").
     Build()
 ```
 
@@ -253,120 +247,81 @@ affected, err := sqb.ExecGuardedBuilder(ctx, db,
 
 ## Advanced Features
 
+### Expressions and Functions
+
+```go
+// UUID generation (dialect-aware)
+insert := sqb.Insert(d).
+    Into("users").
+    Columns("id", "email", "created_at").
+    ValuesRow(sqb.UUIDv4(d), "user@example.com", sqb.RawExpr("NOW()"))
+
+// Complex expressions
+sql, args, err := sqb.Update(d).
+    Table("stats").
+    SetExpr("score", sqb.RawExpr("GREATEST(score, ?)", 100)).
+    SetExpr("last_updated", sqb.RawExpr("NOW()")).
+    Where(sqb.Eq("user_id", 123, d)).
+    Build()
+```
+
 ### Batch Operations
 
 ```go
-// Large insert with automatic chunking
-insert := sqb.Insert(d).
-    Into("events").
-    Columns("user_id", "event_type", "data")
-
-// Add thousands of rows...
+// Large batch with automatic chunking
+insert := sqb.Insert(d).Into("events").Columns("user_id", "event_type")
 for i := 0; i < 10000; i++ {
-    insert.ValuesRow(i, "login", fmt.Sprintf("data_%d", i))
+    insert.ValuesRow(i, "login")
 }
 
-// Split into chunks that respect database parameter limits
-chunks := insert.MaxParamsChunk(900) // SQLite limit
+// Split into dialect-appropriate chunks
+chunks := insert.MaxParamsChunk(900) // SQLite parameter limit
 for _, chunk := range chunks {
     sql, args, err := chunk.Build()
-    if err != nil {
-        log.Fatal(err)
-    }
-    _, err = db.ExecContext(ctx, sql, args...)
-    if err != nil {
-        log.Fatal(err)
-    }
+    // Execute each chunk...
 }
 ```
 
-### Struct Integration
+## Supported Dialects
+
+| Feature            | PostgreSQL    | MySQL              | SQLite          | SQL Server      |
+| ------------------ | ------------- | ------------------ | --------------- | --------------- |
+| **Identifiers**    | `"quoted"`    | `` `quoted` ``     | `"quoted"`      | `[quoted]`      |
+| **Placeholders**   | `$1, $2`      | `?, ?`             | `?, ?`          | `@p1, @p2`      |
+| **RETURNING**      | ✅            | ❌                 | ✅ (3.35+)      | ❌              |
+| **Upserts**        | `ON CONFLICT` | `ON DUPLICATE KEY` | `ON CONFLICT`   | `MERGE`         |
+| **JSON**           | `JSON/JSONB`  | `JSON`             | `JSON`          | `NVARCHAR(MAX)` |
+| **AUTO_INCREMENT** | `IDENTITY`    | `AUTO_INCREMENT`   | `AUTOINCREMENT` | `IDENTITY(1,1)` |
+| **ALTER TABLE**    | Full support  | Full support       | Limited         | Full support    |
 
 ```go
-type User struct {
-    ID     int64  `db:"id"`
-    Email  string `db:"email"`
-    Name   string `db:"name"`
-    Status string `db:"status"`
+// Configure SQLite features
+d := sqb.SQLite{
+    EnableUpsert:    true,  // ON CONFLICT support (3.24+)
+    EnableReturning: true,  // RETURNING support (3.35+)
 }
-
-// Extract columns and values from struct
-cols, vals, err := sqb.StructColumnsValues(user, "id") // exclude ID
-sql, args, err := sqb.Insert(d).
-    Into("users").
-    Columns(cols...).
-    ValuesRow(vals...).
-    Build()
-
-// Generate SET map for updates
-setMap, err := sqb.StructSetMap(user, "id", "created_at") // exclude ID and created_at
-update := sqb.Update(d).Table("users")
-for col, val := range setMap {
-    update.Set(col, val)
-}
-sql, args, err := update.Where(sqb.Eq("id", user.ID, d)).Build()
 ```
-
-### Custom Expressions
-
-```go
-// Raw SQL expressions
-sql, args, err := sqb.Update(d).
-    Table("counters").
-    SetExpr("count", sqb.RawExpr("count + ?", 1)).
-    SetExpr("updated_at", sqb.RawExpr("NOW()")).
-    Where(sqb.Eq("id", 1, d)).
-    Build()
-
-// Database functions
-sql, args, err := sqb.Select(d).
-    ColumnExpr("COUNT(*) as total").
-    ColumnExpr("AVG(rating) as avg_rating").
-    From("reviews").
-    Where(sqb.Gte("created_at", "2023-01-01", d)).
-    Build()
-```
-
-## Error Handling
-
-The library provides specific error types for common issues:
-
-```go
-var (
-    ErrNoTable                    = errors.New("sqb: table not specified")
-    ErrNoColumns                  = errors.New("sqb: no columns specified")
-    ErrNoRows                     = errors.New("sqb: no rows to insert")
-    ErrNoSetClauses               = errors.New("sqb: no SET clauses (nothing to update)")
-    ErrWhereRequired              = errors.New("sqb: WHERE clause required by guard")
-    ErrOnConflictNotSupported     = errors.New("sqb: ON CONFLICT not supported by this dialect")
-    // ... and more
-)
-```
-
-## Performance Tips
-
-1. **Reuse builders**: Create builder instances once and reuse them
-2. **Batch operations**: Use `ValuesRows()` for multi-row inserts
-3. **Chunk large operations**: Use `MaxParamsChunk()` for very large inserts
-4. **Prepared statements**: The generated SQL is prepared-statement friendly
 
 ## Testing
 
+The library includes comprehensive tests covering all dialects and features:
+
 ```bash
-go test ./sqb
+go test ./sqb -v
 ```
 
-The library includes comprehensive tests covering:
-- All SQL dialects
-- Query building correctness
+All tests pass and cover:
+
+- SQL generation correctness across dialects
+- Type system mappings
 - Safety guard functionality
+- Complex query scenarios
 - Error conditions
-- Multi-dialect compatibility
 
-## License
+## Performance & Best Practices
 
-[Add your license here]
-
-## Contributing
-
-[Add contributing guidelines here]
+1. **Reuse builders** for repeated operations
+2. **Use typed columns** for better portability
+3. **Leverage batch operations** for large datasets
+4. **Enable safety guards** in production
+5. **Use prepared statements** - all SQL is prepared-statement ready

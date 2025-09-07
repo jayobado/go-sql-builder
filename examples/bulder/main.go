@@ -35,10 +35,10 @@ func demoCreateTable(d sqb.Dialect) []string {
 	ct := sqb.CreateTable(d).
 		Table("public.users").
 		IfNotExists().
-		Column("id", "BIGINT", sqb.AutoIncrement(), sqb.NotNull()).
-		Column("email", "TEXT", sqb.NotNull()).
-		Column("name", "TEXT", sqb.NotNull()).
-		Column("status", "TEXT", sqb.DefaultLiteral("'active'")).
+		Column("id", sqb.BigInt(), sqb.AutoIncrement(), sqb.NotNull()).
+		Column("email", sqb.Text(), sqb.NotNull()).
+		ColumnStr("name", "TEXT", sqb.NotNull()).
+		ColumnStr("status", "TEXT", sqb.DefaultLiteral("'active'")).
 		PrimaryKey("id")
 
 	// Indexes: keep one simple and one advanced
@@ -158,9 +158,9 @@ func demoDelete(d sqb.Dialect) (string, []any, error) {
 func demoAlterDrop(d sqb.Dialect) ([]string, string) {
 	alts, err := sqb.AlterTable(d).
 		Table("public.users").
-		AddColumn("nickname", "TEXT").
+		AddColumn("nickname", sqb.Text()).
 		SetDefault("status", "'active'").
-		RenameColumn("name", "full_name").
+		RenameColumn("name", "full_name", sqb.Varchar(100)).
 		AddUnique("uq_users_email", "email").
 		BuildMany()
 	if err != nil {

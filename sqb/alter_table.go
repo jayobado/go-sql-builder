@@ -13,33 +13,91 @@ type AlterTableBuilder struct {
 
 func AlterTable(d Dialect) *AlterTableBuilder                       { return &AlterTableBuilder{d: d} }
 func (b *AlterTableBuilder) Table(name string) *AlterTableBuilder    { b.table = name; return b }
-func (b *AlterTableBuilder) AddColumn(name, typ string, opts ...ColOption) *AlterTableBuilder {
+func (b *AlterTableBuilder) AddColumnStr(name, typ string, opts ...ColOption) *AlterTableBuilder {
 	c := colDef{name: name, typ: strings.ToUpper(strings.TrimSpace(typ))}
 	for _, opt := range opts { opt(&c) }
 	b.ops = append(b.ops, addColOp{c: c}); return b
 }
+
+func (b *AlterTableBuilder) AddColumn(name string, typ Type, opts ...ColOption) *AlterTableBuilder {
+	return b.AddColumnStr(name, typ.SQL(b.d), opts...)
+}
+
 func (b *AlterTableBuilder) DropColumn(name string, ifExists bool) *AlterTableBuilder {
 	b.ops = append(b.ops, dropColOp{name: name, ifExists: ifExists}); return b
 }
-func (b *AlterTableBuilder) RenameColumn(oldName, newName string) *AlterTableBuilder {
+
+func (b *AlterTableBuilder) RenameColumnStr(oldName, newName string) *AlterTableBuilder {
 	b.ops = append(b.ops, renameColOp{old: oldName, new: newName}); return b
 }
+
+func (b *AlterTableBuilder) RenameColumn(oldName, newName string, newType Type) *AlterTableBuilder {
+	switch b.d.Name() {
+	case "mysql":
+		return b.RenameColumnTyped(oldName, newName, newType.SQL(b.d))
+	default:
+		return b.RenameColumnStr(oldName, newName)
+	}
+}
+
 func (b *AlterTableBuilder) RenameColumnTyped(oldName, newName, newType string) *AlterTableBuilder {
 	b.ops = append(b.ops, renameColTypedOp{old: oldName, new: newName, typ: newType}); return b
 }
-func (b *AlterTableBuilder) AlterType(col, newType string, usingSQL ...string) *AlterTableBuilder {
+
+func (b *AlterTableBuilder) AlterTypeStr(col, newType string, usingSQL ...string) *AlterTableBuilder {
 	var using string; if len(usingSQL) > 0 { using = strings.TrimSpace(usingSQL[0]) }
 	b.ops = append(b.ops, alterTypeOp{col: col, typ: strings.ToUpper(strings.TrimSpace(newType)), using: using}); return b
 }
-func (b *AlterTableBuilder) SetNotNull(col string) *AlterTableBuilder {
+
+func (b *AlterTableBuilder) AlterType(col string, typ Type, usingSQL ...string) *AlterTableBuilder {
+	return b.AlterTypeStr(col, typ.SQL(b.d), usingSQL...)
+}
+
+
+func (b *AlterTableBuilder) SetNotNullStr(col string) *AlterTableBuilder {
 	b.ops = append(b.ops, setNullOp{col: col, notNull: true}); return b
 }
-func (b *AlterTableBuilder) SetNullable(col string) *AlterTableBuilder {
+func (b *AlterTableBuilder) SetNullableStr(col string) *AlterTableBuilder {
 	b.ops = append(b.ops, setNullOp{col: col, notNull: false}); return b
 }
 func (b *AlterTableBuilder) SetNullabilityTyped(col, typ string, notNull bool) *AlterTableBuilder {
 	b.ops = append(b.ops, setNullTypedOp{col: col, typ: strings.ToUpper(strings.TrimSpace(typ)), notNull: notNull}); return b
 }
+
+// SetNullabilityT flips NULL/NOT NULL and supplies the full type when the dialect needs it
+// (MySQL/SQL Server). PG/SQLite will fall back to the existing untyped methods.
+func (b *AlterTableBuilder) SetNullabilityT(col string, typ Type, notNull bool) *AlterTableBuilder {
+	switch b.d.Name() {
+	case "mysql", "sqlserver":
+		return b.SetNullabilityTyped(col, typ.SQL(b.d), notNull)
+	case "postgres":
+		if notNull { return b.SetNotNullStr(col) }
+		return b.SetNullableStr(col)
+	default:
+		// SQLite ALTER NULLABILITY isn't supported; keep behavior consistent
+		if notNull { return b.SetNotNullStr(col) }
+		return b.SetNullableStr(col)
+	}
+}
+
+func (b *AlterTableBuilder) SetNotNull(col string, typ Type) *AlterTableBuilder {
+	switch b.d.Name() {
+	case "mysql", "sqlserver":
+		return b.SetNullabilityTyped(col, typ.SQL(b.d), true)
+	default:
+		return b.SetNotNullStr(col)
+	}
+}
+
+func (b *AlterTableBuilder) SetNullableT(col string, typ Type) *AlterTableBuilder {
+	switch b.d.Name() {
+	case "mysql", "sqlserver":
+		return b.SetNullabilityTyped(col, typ.SQL(b.d), false)
+	default:
+		return b.SetNullableStr(col)
+	}
+}
+
 func (b *AlterTableBuilder) SetDefault(col, defaultSQL string) *AlterTableBuilder {
 	b.ops = append(b.ops, setDefaultOp{col: col, sql: defaultSQL}); return b
 }
