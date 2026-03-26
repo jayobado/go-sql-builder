@@ -19,7 +19,7 @@ package main
 
 import (
     "log"
-    "github.com/jayobado/sql-builder/sqb"
+    "github.com/jayobado/go-sql-builder/sqb"
 )
 
 func main() {
