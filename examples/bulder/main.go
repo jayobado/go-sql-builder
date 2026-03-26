@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/jayobado/sql-builder/sqb"
+	"github.com/jayobado/go-sql-builder/sqb"
 )
 
 // --- helpers ---
